@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CVE API</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 50px;
+            background-color: #f9f9f9;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            background-color: #fff;
+        }
+
+        th,
+        td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+            transition: background-color 0.3s;
+        }
+
+        th {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+
+        .pagination {
+            margin-top: 20px;
+        }
+
+        .pagination button {
+            margin: 5px;
+            padding: 8px 12px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+
+        .pagination button:hover {
+            background-color: #45a049;
+        }
+
+        h1,
+        p {
+            color: #333;
+        }
+
+        #content {
+            margin-top: 20px;
+            display: none;
+            padding: 20px;
+            border: 1px solid #ddd;
+            background-color: #fff;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        #metrics {
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            padding: 10px;
+            display: none;
+        }
+
+        #back-button {
+            margin: 10px;
+            padding: 8px 12px;
+            cursor: pointer;
+            background-color: #f44336;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+            display: none; /* Initially hidden */
+        }
+
+        #back-button:hover {
+            background-color: #d32f2f;
+        }
+
+        /* New styles for metrics display */
+        .metrics-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .metric-card {
+            background: #fff;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            width: 300px;
+            text-align: left;
+            transition: transform 0.3s ease-in-out;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .metric-item {
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+
+        .metric-item strong {
+            color: #4CAF50;
+        }
+
+        .metric-item span {
+            color: #333;
+        }
+
+    </style>
+</head>
+
+<body>
+
+    <h1>CVE LIST</h1>
+
+    <div id="result"></div>
+    <div class="row-selector">
+        <label for="rows-per-page">Rows per page: </label>
+        <select id="rows-per-page" onchange="changeRowsPerPage()">
+            <option value="10">10</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+        </select>
+    </div>    
+    <div class="pagination">
+        <button id="prev-button" onclick="changePage(-1)" style="display: none;">Previous</button>
+        <button id="next-button" onclick="changePage(1)" style="display: none;">Next</button>
+    </div>
+
+    <div id="content">
+        <button id="back-button" onclick="backToTable()">Back</button>
+        <div id="metrics"></div> <!-- Section to display metrics for selected vulnerability -->
+    </div>
+
+    <script>
+        let currentPage = 1;  // Current page number
+        let totalPages = 1;   // Total number of pages
+        let rowsPerPage = 10; // Default rows per page
+
+        // Fetch vulnerabilities immediately when the page loads
+        fetchVulnerabilities('/cves/list', currentPage, rowsPerPage);
+
+        function fetchVulnerabilities(endpoint, page, rows) {
+            fetch(`${endpoint}?page=${page}&rows=${rows}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json(); // Get the response as JSON
+            })
+            .then(data => {
+                renderTable(data.data); // Render the table with the fetched data
+                currentPage = page; // Update the current page number
+                totalPages = data.total_pages; // Update total pages from response
+                updatePaginationButtons(); // Update pagination buttons visibility
+            })
+            .catch(error => {
+                console.error('Error fetching data:', error);
+                alert('Error: ' + error.message);
+            });
+        }
+
+        function renderTable(data) {
+            if (!data || data.length === 0) {
+                document.getElementById('result').innerHTML = "<p>No vulnerabilities found.</p>";
+                return;
+            }
+
+            let tableHtml = '<table><thead><tr>';
+            // Generate headers from keys of the first object
+            for (let key in data[0]) {
+                tableHtml += `<th>${key}</th>`;
+            }
+            tableHtml += '</tr></thead><tbody>';
+
+            // Generate rows from data
+            data.forEach(row => {
+                tableHtml += '<tr onclick="fetchMetrics(' + row.id + ')">'; // Update to use 'id'
+                for (let value of Object.values(row)) {
+                    tableHtml += `<td>${value}</td>`;
+                }
+                tableHtml += '</tr>';
+            });
+            tableHtml += '</tbody></table>';
+
+            document.getElementById('result').innerHTML = tableHtml; // Insert the generated table into the result div
+        }
+
+        function changeRowsPerPage() {
+            // Get the selected rows value from the dropdown
+            rowsPerPage = parseInt(document.getElementById('rows-per-page').value);
+            currentPage = 1; // Reset to the first page when changing the rows per page
+            fetchVulnerabilities('/cves/list', currentPage, rowsPerPage);
+        }
+
+        function updatePaginationButtons() {
+            const prevButton = document.getElementById('prev-button');
+            const nextButton = document.getElementById('next-button');
+
+            // Show or hide the Previous button based on current page
+            prevButton.style.display = currentPage > 1 ? 'inline-block' : 'none';
+
+            // Show Next button only if there's more data to fetch
+            nextButton.style.display = currentPage < totalPages ? 'inline-block' : 'none';
+        }
+
+        function changePage(direction) {
+            // Calculate the next page based on the direction
+            let nextPage = currentPage + direction;
+
+            // Make sure nextPage is within valid bounds
+            if (nextPage < 1) nextPage = 1;  // Prevent going to a page less than 1
+            if (nextPage > totalPages) nextPage = totalPages; // Prevent going to a page greater than total pages
+
+            // Fetch vulnerabilities for the new page
+            fetchVulnerabilities('/cves/list', nextPage, rowsPerPage);
+        }
+
+        function fetchMetrics(id) { // Update function to accept 'id'
+            fetch(`/cves/id/${id}`, { // Update URL to use 'id'
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Metrics not found');
+                }
+                return response.json(); // Get the response as JSON
+            })
+            .then(metrics => {
+                renderMetrics(metrics); // Render the fetched metrics
+            })
+            .catch(error => {
+                console.error('Error fetching metrics:', error);
+                document.getElementById('metrics').innerHTML = "<p>Error fetching metrics.</p>";
+            });
+        }
+
+        function renderMetrics(metrics) {
+    if (!metrics || metrics.length === 0) {
+        document.getElementById('metrics').innerHTML = "<p>No metrics found for the selected vulnerability.</p>";
+        return;
+    }
+
+    let metricsHtml = '<h2>Metrics for Selected Vulnerability</h2>';
+    
+    metricsHtml += '<div class="metrics-container">';
+
+    // Generate metric cards
+    metrics.forEach(metric => {
+        metricsHtml += '<div class="metric-card">';
+        for (let key in metric) {
+            metricsHtml += `<div class="metric-item"><strong>${key}:</strong> <span>${metric[key]}</span></div>`;
+        }
+        metricsHtml += '</div>';
+    });
+
+    metricsHtml += '</div>';
+
+    // Hide the main table and show metrics
+    document.getElementById('result').style.display = 'none';
+    document.getElementById('metrics').innerHTML = metricsHtml;
+    document.getElementById('metrics').style.display = 'block';
+    document.getElementById('content').style.display = 'block';
+    document.getElementById('back-button').style.display = 'inline-block';
+
+    // Hide pagination buttons and rows per page dropdown when displaying metrics
+    document.getElementById('prev-button').style.display = 'none';
+    document.getElementById('next-button').style.display = 'none';
+    document.getElementById('rows-per-page').style.display = 'none'; // Hide rows per page dropdown
+    document.querySelector('.row-selector').style.display = 'none';  // Hide the label for "Rows per page"
+}
+
+function backToTable() {
+    // Hide metrics and show the main table again
+    document.getElementById('metrics').style.display = 'none'; // Hide metrics
+    document.getElementById('result').style.display = 'block'; // Show table
+    document.getElementById('back-button').style.display = 'none'; // Hide back button
+    document.getElementById('content').style.display = 'none'; // Hide content section
+
+    // Show pagination buttons and rows per page dropdown again
+    updatePaginationButtons(); // Call this to refresh the visibility of pagination buttons
+    document.getElementById('rows-per-page').style.display = 'inline-block'; // Show rows per page dropdown again
+    document.querySelector('.row-selector').style.display = 'inline-block'; // Show the label for "Rows per page"
+}
+
+
+    </script>
+
+</body>
+
+</html>
